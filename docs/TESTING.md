@@ -193,6 +193,8 @@ Each fake workspace contains `execution-proof.json`, `last-prompt.txt`, and `eve
 These are open defects, not out-of-scope limitations. Do not rely on the affected behaviour and do not treat a passing offline suite as coverage of them.
 
 - **Abandoned attachment uploads cannot be deleted**; selecting a file uploads it immediately, and removing the chip only forgets it in the browser.
+- **A concurrent duplicate post during a failing save** can receive the message that the failed save then rolls back; the retry path is safe, the in-flight response is not.
+- **Mention separator consumption covers whitespace and `, ; : . ! ?`**; a mention followed by `)` and then another mention (`@Mini) @Dell`) addresses only the first.
 - **A remote ACP agent receives the Hub-side workspace path as `cwd`.**
 
 ## Current limitations
