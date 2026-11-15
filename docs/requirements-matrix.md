@@ -13,6 +13,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 - **FILE:** `node --test tests/attachments.test.mjs` — binary upload, exact hashes, retry deduplication/conflicts, size/type/path/content rejection, aborted transfer cleanup, one-room/one-message rules, identical Mini/remote-Dell delivery, restart-safe downloads, delayed-upload/deletion race protection, aborted-upload guard release, legacy state, and room-deletion cleanup.
 - **SUP:** `node --test tests/supervision.test.mjs` — connectivity, startup-failure containment, redaction, unique workspaces, concurrent idempotency, queue ordering, fake stop, safe retry, and active-deletion safeguards.
 - **LIFE:** `node --test tests/lifecycle.test.mjs` — idle and absolute prompt timeouts with cancellation and process-group cleanup, pre-dispatch versus post-dispatch classification, approval-paused timers, shutdown terminal states, no reply after stop begins, orphan cleanup, non-overlapping recovery, and a real SIGTERM deadline.
+- **CORR:** `node --test tests/correctness.test.mjs` — whole-name, longest-first, boundary-checked, consumed mentions; room-scoped idempotency receipts with a version 6→7 migration; and post rollback when persistence fails.
 - **DEC:** `node --test tests/approvals.test.mjs tests/elicitation.test.mjs` — native `elicitation/create` questions, complete/redacted operation details, permission allow/reject, question accept/decline/cancel, session binding, invalid/repeated decisions, expiry, waiting stop, active-modification guards, restart recovery, the persistence-decision race, and ACP process-group cleanup.
 - **CI:** `.github/workflows/test.yml` — runs CHECK and all offline tests for every PR and push to `main`; browser and live provider evidence remains local.
 - **UI:** `npm run test:ui` — isolated Chrome desktop and 390 px phone acceptance, including real file-input upload, hash/status chips, room locking, message metadata, exact downloads and fake-agent bytes, pending/completed tool and plan progress, raw command/output, failure rendering, node labels, visible permission command/path/diff details, and native question accept/decline flows; artifacts are written under ignored `artifacts/ui-validation/`.
@@ -20,7 +21,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 - **REAL-SUP:** `npm run test:opencode-supervision` — five small live calls proving native permission approval with complete operation details, a real OpenCode form question, active stop, induced provider failure, descendant cleanup, and post-failure recovery in the same native session; report under ignored `artifacts/opencode-supervision/`.
 - **SVC:** `launchctl print gui/$(id -u)/com.molaoshi.qenbet` plus health/state checks and an intentional `kickstart -k` restart.
 
-`npm test` runs APP, PROG, ACP, FILE, SUP, DEC, and LIFE. UI requires macOS and Google Chrome. Future physical-phone, Dell, MacBook, security, and backup gates require their own recorded evidence; local simulation is not a substitute.
+`npm test` runs APP, PROG, ACP, FILE, SUP, DEC, LIFE, and CORR. UI requires macOS and Google Chrome. Future physical-phone, Dell, MacBook, security, and backup gates require their own recorded evidence; local simulation is not a substitute.
 
 ## Status summary
 
@@ -28,7 +29,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 - **M1:** Exit gate passed 2026-11-02, but EXEC-03 is now Partial: the 2026-11-12 review found that shutdown drains instead of interrupting and that the prompt timeout does not cancel the native turn. M1 re-closes when the lifecycle gate passes.
 - **M2:** Active; real OpenCode native execution, session resume, supervision, detailed approvals, native form questions, rich progress, and deliberate attachments passed on 2026-11-03, while FILE-02 generated-file return remains open.
 - **M3–M5:** Planned; see `docs/migration-plan.md`.
-- **Lifecycle change:** implemented and offline-verified on 2026-11-12 (LIFE 13/13, 38/38 offline, UI acceptance). The live REAL-SUP gate is not reproducible on OpenCode 2.2.5 because the agent intermittently declines the required tools; EXEC-03 and EXEC-04 stay Partial until a live re-run passes. FILE-02 remains next.
+- **Lifecycle change:** implemented and offline-verified on 2026-11-12 (LIFE 13/13, 43/43 offline, UI acceptance). The live REAL-SUP gate is not reproducible on OpenCode 2.2.5 because the agent intermittently declines the required tools; EXEC-03 and EXEC-04 stay Partial until a live re-run passes. FILE-02 remains next.
 - No P0/P1 requirement may be called Done from implementation alone; the evidence column must actually pass.
 
 ## Core application and state
@@ -37,7 +38,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 |---|---|---|---|
 | CORE-01 | M0 | Done | APP checks `accounts:false` and no external analytics flag; UI loads the complete app without sign-in or an upstream platform. |
 | CORE-02 | M0 | Done | SVC verified running under launchd and automatically recovered after an intentional restart on 2026-11-02. |
-| CORE-03 | M5 | Partial | APP proves JSON state, fake-session restart, persisted execution records, and unfinished-to-unknown recovery; backup/restore remains. |
+| CORE-03 | M5 | Partial | APP proves JSON state, fake-session restart, persisted execution records, and unfinished-to-unknown recovery; CORR proves the version 6→7 receipt migration; backup/restore remains. |
 
 ## Rooms and conversation
 
@@ -46,7 +47,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 | ROOM-01 | M0 | Done | APP verifies the global Army room and both initial agents; UI addresses agents without host switching. |
 | ROOM-02 | M0 | Done | APP creates a member-scoped room and persists it; UI creates, selects, and displays separate transcripts. |
 | ROOM-03 | M1 | Done | APP and UI cover rename, purpose/membership editing, confirmed deletion with history/receipt cleanup, active-work deletion blocking, and Army protections. |
-| ROOM-04 | M0 | Done | APP proves Army and project-room `@everyone` routing, disabled-agent exclusion, and origin room IDs. |
+| ROOM-04 | M0 | Done | APP proves Army and project-room `@everyone` routing, disabled-agent exclusion, and origin room IDs. CORR proves whole-name, longest-first, boundary-checked mentions that consume the match (`@Mini` versus `@Mini Fake`, `@Devon`, `@everyoneX`), including trailing punctuation and comma-separated mentions. |
 
 ## Agent and harness management
 
@@ -61,7 +62,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 
 | ID | Milestone | Status | Acceptance evidence |
 |---|---|---|---|
-| EXEC-01 | M1 | Done | SUP proves concurrent duplicate-post suppression, per-agent queued/running order, and ordered replies; APP retains single-post idempotency coverage. |
+| EXEC-01 | M1 | Done | SUP proves concurrent duplicate-post suppression, per-agent queued/running order, and ordered replies; APP retains single-post idempotency coverage. CORR proves keys are room-scoped with a version 6→7 migration, and that a failed save rolls back so the retry can execute. |
 | EXEC-02 | M1 | Done | APP/SUP/DEC verify persisted queued/running/waiting/completed/failed/interrupted/unknown histories and result links; REAL-SUP verifies waiting/running transitions on OpenCode; UI exposes applicable states without false success. |
 | EXEC-03 | M1 | Partial | SUP and UI stop queued/active fake turns; DEC proves process-group cleanup; REAL-SUP passes real active stop, stopped-tool cleanup, induced provider failure, crashed-tool cleanup, a fresh ACP process, and same-session recovery. **Fixed and offline-verified:** configurable idle and absolute prompt timeouts with `session/cancel`, bounded grace and process-group kill, a follow-up turn that cannot start until the timed-out process has exited, bounded shutdown with terminal states, concurrent client stops, retirement tracking that shutdown awaits, and no orphans (LIFE 13/13; SIGTERM exit code 0 inside the asserted bound, no deadline log). **Blocker:** live REAL-SUP has not passed on OpenCode 2.2.5. |
 | EXEC-04 | M1 | Partial | APP/SUP prove unknown recovery without reruns, rejected unknown/interrupted retries, one known-safe fail-once retry, and completed attempt-two linking; UI exercises safe retry. **Fixed and offline-verified:** a post-dispatch timeout or transport loss records `unknown`, a pre-dispatch failure records `failed`, and retry safety stays limited to `-32010` (LIFE). **Blocker:** live REAL-SUP has not passed on OpenCode 2.2.5. |
@@ -141,7 +142,7 @@ Implemented: configurable idle and absolute prompt timeouts with `session/cancel
 Evidence:
 
 - **LIFE:** 13/13 pass — idle and absolute timeouts become `unknown` with their process gone; a queued follow-up cannot start until the timed-out process has exited (no overlap file); a pre-dispatch failure is `failed` and a post-dispatch transport loss is `unknown`; approval timers pause; a session-request timeout and a malformed stream retire the wedged client; shutdown leaves `unknown` and `interrupted`, resolves a waiting approval, rejects new posts, writes no reply after stopping, stops several agents concurrently, awaits an in-flight retirement before returning, and a real SIGTERM exits with code 0 inside the asserted bound, with no deadline log and no orphan process.
-- **Offline suite:** 38/38 pass on Node 26.7.0.
+- **Offline suite:** 43/43 pass on Node 26.7.0.
 - **UI:** pass, including `.approval-countdown` and `.room-badge` assertions, with no runtime exceptions.
 
 Blocked: the live REAL-SUP gate. Five attempts on 2026-11-12 against OpenCode CLI 2.2.5 failed at different tool-use steps (the agent answered without asking, declined `sleep 60`, or skipped the permission request). Approval and question round trips each passed in at least one attempt. The November evidence was produced with CLI 2.0.26, which is no longer installed, so EXEC-03 and EXEC-04 stay Partial until a live run against the installed CLI passes.
@@ -150,4 +151,4 @@ Gate for FILE-02 and M3: a green REAL-SUP run, then re-run LIFE and the real fil
 
 ## Current release conclusion
 
-Qenbet is a verified local application with M2 active, not full-feature V1. The 2026-11-12 lifecycle change implements the EXEC-03 and EXEC-04 fixes and passes its offline gate, but both stay Partial until the live supervision gate passes on the installed CLI. All 38 offline tests pass, desktop and 390 px browser acceptance passes, and one real OpenCode adapter has passed five supervision calls plus the separate two-call file/session gate on CLI 2.0.26, covering native file and embedded-resource attachment delivery, identity, lifecycle, session resume, completed real tool progress with no replay duplicates, detailed permission, genuine form-question, stop/failure supervision, and descendant cleanup. FILE-01 is Done; FILE-02 generated-file return and the complete M2 exit gate remain open. Physical devices, other real harnesses, and production readiness must not be inferred from this local adapter or phone-sized-browser evidence.
+Qenbet is a verified local application with M2 active, not full-feature V1. The 2026-11-12 lifecycle change implements the EXEC-03 and EXEC-04 fixes and passes its offline gate, but both stay Partial until the live supervision gate passes on the installed CLI. All 43 offline tests pass, desktop and 390 px browser acceptance passes, and one real OpenCode adapter has passed five supervision calls plus the separate two-call file/session gate on CLI 2.0.26, covering native file and embedded-resource attachment delivery, identity, lifecycle, session resume, completed real tool progress with no replay duplicates, detailed permission, genuine form-question, stop/failure supervision, and descendant cleanup. FILE-01 is Done; FILE-02 generated-file return and the complete M2 exit gate remain open. Physical devices, other real harnesses, and production readiness must not be inferred from this local adapter or phone-sized-browser evidence.

@@ -164,7 +164,6 @@ Known gaps (open):
 
 - A remote agent's `session/new` and `session/load` receive the Hub-side workspace path as `cwd`; the connector passes it through unchanged, so the first real remote harness would be handed a Mac mini path.
 - Attachment bytes uploaded from a compose that is never sent cannot be deleted; they live until the whole room is deleted.
-- Mention routing still matches a leading prefix without a word boundary, and message idempotency keys are global rather than room-scoped; both are fixed in the correctness sweep.
 
 Not yet implemented:
 
