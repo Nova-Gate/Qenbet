@@ -16,6 +16,7 @@
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body { background: var(--cream); color: var(--navy); font-family: var(--body); font-size: 15px; }
 button, textarea, input, select { font: inherit; }
+input, textarea, select { font-size: 16px; }
 button { color: inherit; cursor: pointer; }
 button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

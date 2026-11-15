@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
@@ -86,6 +86,14 @@ export class AttachmentStore {
     const path = resolve(this.root, id);
     if (!/^[-a-f0-9]{36}$/.test(id) || !path.startsWith(`${this.root}/`)) throw problem("Invalid attachment storage identity.");
     return path;
+  }
+
+  async list() {
+    const entries = await readdir(this.root).catch((error) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    return entries.filter((name) => /^[-a-f0-9]{36}$/.test(name));
   }
 
   async save({ name, mediaType, body }) {

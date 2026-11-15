@@ -57,6 +57,7 @@ export class Hub {
     promptIdleTimeoutMs = 600_000,
     promptAbsoluteTimeoutMs = 1_800_000,
     cancelGraceMs = 2_000,
+    attachmentTtlMs = 86_400_000,
   }) {
     this.root = root;
     this.statePath = statePath;
@@ -67,6 +68,7 @@ export class Hub {
     this.promptIdleTimeoutMs = promptIdleTimeoutMs;
     this.promptAbsoluteTimeoutMs = promptAbsoluteTimeoutMs;
     this.cancelGraceMs = cancelGraceMs;
+    this.attachmentTtlMs = attachmentTtlMs;
     this.stopping = false;
     this.listeners = new Set();
     this.state = null;
@@ -183,6 +185,7 @@ export class Hub {
     });
     await mkdir(dirname(this.statePath), { recursive: true });
     await this.attachmentStore.init();
+    await this.collectAbandonedAttachments();
     await this.save();
   }
 
@@ -521,6 +524,44 @@ export class Hub {
     const attachment = this.state.attachments.find((candidate) => candidate.id === attachmentId);
     if (!attachment) throw problem("Attachment not found.", 404);
     return { attachment: publicAttachment(attachment), content: await this.attachmentStore.read(attachment) };
+  }
+
+  async removeAttachment(attachmentId) {
+    const attachment = this.state.attachments.find((candidate) => candidate.id === attachmentId);
+    if (!attachment) throw problem("Attachment not found.", 404);
+    if (attachment.messageId) throw problem("An attachment that has been sent cannot be deleted.", 409);
+    const receiptKeys = Object.entries(this.state.attachmentReceipts)
+      .filter(([, id]) => id === attachmentId)
+      .map(([key]) => key);
+    this.state.attachments = this.state.attachments.filter((candidate) => candidate.id !== attachmentId);
+    for (const key of receiptKeys) delete this.state.attachmentReceipts[key];
+    try {
+      await this.save();
+    } catch (error) {
+      this.state.attachments.push(attachment);
+      for (const key of receiptKeys) this.state.attachmentReceipts[key] = attachmentId;
+      throw error;
+    }
+    await this.attachmentStore.remove(attachment.id);
+    this.emit("change");
+    return { removed: attachment.id };
+  }
+
+  async collectAbandonedAttachments(now = Date.now()) {
+    const staleBefore = now - this.attachmentTtlMs;
+    const stale = this.state.attachments.filter((attachment) => !attachment.messageId && new Date(attachment.createdAt).getTime() < staleBefore);
+    if (stale.length) {
+      const staleIds = new Set(stale.map((attachment) => attachment.id));
+      this.state.attachments = this.state.attachments.filter((attachment) => !staleIds.has(attachment.id));
+      for (const [key, id] of Object.entries(this.state.attachmentReceipts)) {
+        if (staleIds.has(id)) delete this.state.attachmentReceipts[key];
+      }
+      await Promise.all(stale.map((attachment) => this.attachmentStore.remove(attachment.id)));
+    }
+    const referenced = new Set(this.state.attachments.map((attachment) => attachment.id));
+    const orphans = (await this.attachmentStore.list()).filter((id) => !referenced.has(id));
+    await Promise.all(orphans.map((id) => this.attachmentStore.remove(id)));
+    return { expired: stale.length, orphans: orphans.length };
   }
 
   async post({ text, clientMessageId, roomId = "army", attachmentIds = [] }) {

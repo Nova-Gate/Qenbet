@@ -105,6 +105,10 @@ const server = http.createServer(async (request, response) => {
       });
       return json(response, result.duplicate ? 200 : 201, result);
     }
+    const attachmentMatch = url.pathname.match(/^\/api\/attachments\/([^/]+)$/);
+    if (attachmentMatch && request.method === "DELETE") {
+      return json(response, 200, await hub.removeAttachment(decodeURIComponent(attachmentMatch[1])));
+    }
     const attachmentContentMatch = url.pathname.match(/^\/api\/attachments\/([^/]+)\/content$/);
     if (attachmentContentMatch && request.method === "GET") {
       const { attachment, content } = await hub.attachmentContent(decodeURIComponent(attachmentContentMatch[1]));

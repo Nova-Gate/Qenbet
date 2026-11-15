@@ -80,7 +80,15 @@ function renderAttachments() {
     remove.type = "button";
     remove.disabled = sending;
     remove.setAttribute("aria-label", `Remove ${item.file.name}`);
-    remove.addEventListener("click", () => {
+    remove.addEventListener("click", async () => {
+      if (item.status === "ready" && item.attachment) {
+        try {
+          await api(`/api/attachments/${encodeURIComponent(item.attachment.id)}`, { method: "DELETE" });
+        } catch (error) {
+          showToast(error.message);
+          return;
+        }
+      }
       selectedAttachments = selectedAttachments.filter((candidate) => candidate.clientId !== item.clientId);
       renderAttachments();
       renderRooms();
