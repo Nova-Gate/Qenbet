@@ -123,10 +123,10 @@ export class Hub {
       };
     });
     const savedReceipts = saved?.receipts ?? {};
+    const legacyReceipts = !saved?.version || Number(saved.version) < 7;
     const receipts = {};
     for (const [key, messageId] of Object.entries(savedReceipts)) {
-      const scoped = rooms.some((room) => key.startsWith(`${room.id}:`));
-      if (scoped) {
+      if (!legacyReceipts) {
         receipts[key] = messageId;
         continue;
       }
@@ -160,6 +160,10 @@ export class Hub {
       attachmentReceipts: saved?.attachmentReceipts ?? {},
       receipts,
     };
+    const knownMessageIds = new Set(this.state.messages.map((message) => message.id));
+    for (const [key, messageId] of Object.entries(this.state.receipts)) {
+      if (!knownMessageIds.has(messageId)) delete this.state.receipts[key];
+    }
     this.runtime = new AgentRuntime({
       root: this.root,
       agents: this.state.agentDefinitions,
@@ -235,18 +239,18 @@ export class Hub {
     const members = this.members(room);
     let rest = text.trimStart().toLowerCase();
     if (!rest.startsWith("@")) return [];
-    if (/^@everyone(?=$|[\s,;:])/.test(rest)) return members.map((agent) => agent.id);
+    if (/^@everyone(?![\p{L}\p{N}_@])/u.test(rest)) return members.map((agent) => agent.id);
     const selected = [];
     while (rest.startsWith("@")) {
       const match = members
         .map((agent) => ({ agent, name: agent.name.toLowerCase() }))
         .filter(({ name }) => rest.startsWith(`@${name}`))
         .map(({ agent, name }) => ({ agent, end: 1 + name.length }))
-        .filter(({ end }) => end >= rest.length || /[\s,;:]/.test(rest[end]))
+        .filter(({ end }) => !/^[\p{L}\p{N}_@]/u.test(rest.slice(end)))
         .sort((left, right) => right.end - left.end)[0];
       if (!match) break;
       selected.push(match.agent.id);
-      rest = rest.slice(match.end).trimStart();
+      rest = rest.slice(match.end).replace(/^[\s,;:.!?]+/u, "");
     }
     return [...new Set(selected)];
   }

@@ -79,6 +79,7 @@ The integration tests verify:
 - Room deletion blocked during a delayed upload, successful deletion after settlement, and aborted transfers releasing the deletion guard without orphaned metadata or bytes.
 - Legacy-state attachment defaults and room deletion removing attachment metadata, receipts, and stored files.
 - Registry, room, conversation, execution, approval, attachment, and session persistence after an application restart.
+- Whole-name, longest-first, punctuation-boundary mentions (including `@Mini.`, `@everyone!`, and `@Mini, @Dell`); room-scoped idempotency with a version 6→7 migration that also handles colon-prefixed legacy keys; and post rollback of message, executions, receipt, and attachment binding.
 
 ## Real OpenCode acceptance
 
@@ -191,8 +192,6 @@ Each fake workspace contains `execution-proof.json`, `last-prompt.txt`, and `eve
 
 These are open defects, not out-of-scope limitations. Do not rely on the affected behaviour and do not treat a passing offline suite as coverage of them.
 
-- **Mention routing over-matches.** With agents `Mini` and `Mini Fake`, `@Mini Fake hello` addresses both; `@everyoneX` fans out to everyone.
-- **Message idempotency keys are global, not room-scoped**, so the same client message ID reused in another room returns the first room's message.
 - **Abandoned attachment uploads cannot be deleted**; selecting a file uploads it immediately, and removing the chip only forgets it in the browser.
 - **A remote ACP agent receives the Hub-side workspace path as `cwd`.**
 
