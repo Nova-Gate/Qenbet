@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +56,7 @@ test("unused attachments can be deleted; sent ones cannot", async (t) => {
   assert.equal(hub.state.attachments.some((attachment) => attachment.id === uploaded.attachment.id), false);
   assert.equal(hub.state.attachmentReceipts["army:deletable"], undefined);
   await assert.rejects(hub.attachmentContent(uploaded.attachment.id), /not found/i);
+  await assert.rejects(readFile(join(directory, "attachments", uploaded.attachment.id)), /ENOENT/);
   const sent = await hub.uploadAttachment("army", {
     name: "sent.txt",
     mediaType: "text/plain",
@@ -155,4 +156,69 @@ test("ACP clients do not retain notifications across prompts", { timeout: 20_000
   const second = await hub.post({ text: "@Fake again", clientMessageId: "notify-2" });
   await waitForStatus(hub, second.executions[0].id, "completed");
   assert.equal(client.notifications.length, 0);
+});
+
+test("the attachment sweep expires unsent uploads without a restart", { timeout: 10_000 }, async (t) => {
+  const { hub, directory } = await makeHub({ attachmentTtlMs: 50, attachmentGcIntervalMs: 50 });
+  t.after(async () => { await hub.stop(); await rm(directory, { recursive: true, force: true }); });
+  const uploaded = await hub.uploadAttachment("army", {
+    name: "sweep.txt",
+    mediaType: "text/plain",
+    clientAttachmentId: "sweep",
+    body: Readable.from([Buffer.from("sweep me")]),
+  });
+  await delay(400);
+  assert.equal(hub.state.attachments.some((attachment) => attachment.id === uploaded.attachment.id), false);
+  await assert.rejects(readFile(join(directory, "attachments", uploaded.attachment.id)), /ENOENT/);
+});
+
+test("temporary upload files are removed at boot and after ageing", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "qenbet-temporary-"));
+  const attachments = join(directory, "attachments");
+  await mkdir(attachments, { recursive: true });
+  const bootTemp = `${randomUUID()}.111.${randomUUID()}.tmp`;
+  await writeFile(join(attachments, bootTemp), "partial upload");
+  const hub = new Hub({ root, statePath: join(directory, "hub-state.json"), agents: [fakeAgent(directory)] });
+  await hub.load();
+  t.after(async () => { await hub.stop(); await rm(directory, { recursive: true, force: true }); });
+  await assert.rejects(readFile(join(attachments, bootTemp)), /ENOENT/);
+  const oldTemp = `${randomUUID()}.222.${randomUUID()}.tmp`;
+  const freshTemp = `${randomUUID()}.333.${randomUUID()}.tmp`;
+  await writeFile(join(attachments, oldTemp), "old partial");
+  await writeFile(join(attachments, freshTemp), "fresh partial");
+  const past = new Date(Date.now() - 7_200_000);
+  await utimes(join(attachments, oldTemp), past, past);
+  const collected = await hub.collectAbandonedAttachments(Date.now(), { temporaryOlderThanMs: 3_600_000 });
+  assert.equal(collected.temporaries, 1);
+  await assert.rejects(readFile(join(attachments, oldTemp)), /ENOENT/);
+  assert.equal(await readFile(join(attachments, freshTemp), "utf8"), "fresh partial");
+});
+
+test("receipts pointing at missing attachments are dropped", async (t) => {
+  const { hub, directory } = await makeHub();
+  t.after(async () => { await hub.stop(); await rm(directory, { recursive: true, force: true }); });
+  hub.state.attachmentReceipts["army:ghost"] = randomUUID();
+  const collected = await hub.collectAbandonedAttachments();
+  assert.equal(collected.receipts, 1);
+  assert.equal(hub.state.attachmentReceipts["army:ghost"], undefined);
+});
+
+test("a failed sweep save leaves the attachment bytes in place", async (t) => {
+  const { hub, directory } = await makeHub({ attachmentTtlMs: 1 });
+  t.after(async () => { await hub.stop(); await rm(directory, { recursive: true, force: true }); });
+  const uploaded = await hub.uploadAttachment("army", {
+    name: "keep.txt",
+    mediaType: "text/plain",
+    clientAttachmentId: "keep",
+    body: Readable.from([Buffer.from("keep me")]),
+  });
+  hub.state.attachments.find((attachment) => attachment.id === uploaded.attachment.id).createdAt = new Date(Date.now() - 60_000).toISOString();
+  const original = hub.save.bind(hub);
+  hub.save = async () => {
+    hub.save = original;
+    throw new Error("simulated save failure");
+  };
+  await assert.rejects(hub.collectAbandonedAttachments(), /simulated save failure/);
+  assert.ok(hub.state.attachments.some((attachment) => attachment.id === uploaded.attachment.id));
+  assert.equal((await readFile(join(directory, "attachments", uploaded.attachment.id))).length > 0, true);
 });

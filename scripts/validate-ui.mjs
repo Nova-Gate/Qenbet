@@ -149,6 +149,14 @@ try {
   const fileInput = await cdp.send("DOM.querySelector", { nodeId: browserDocument.root.nodeId, selector: "#attachment-input" });
   await cdp.send("DOM.setFileInputFiles", { nodeId: fileInput.nodeId, files: [attachmentFixture] });
   await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
+  const deleteBefore = await (await fetch(new URL('/api/state', url))).json();
+  await cdp.evaluate(`document.querySelector('.attachment-chip .attachment-remove').click()`);
+  await cdp.wait(`!document.querySelector('.attachment-chip') && document.querySelector('#attachment-list').hidden`);
+  const deleteAfter = await (await fetch(new URL('/api/state', url))).json();
+  const attachmentDelete = deleteBefore.attachments.length === 1 && deleteAfter.attachments.length === 0;
+  const fileInputAgain = await cdp.send("DOM.querySelector", { nodeId: browserDocument.root.nodeId, selector: "#attachment-input" });
+  await cdp.send("DOM.setFileInputFiles", { nodeId: fileInputAgain.nodeId, files: [attachmentFixture] });
+  await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
   const attachmentSelection = await cdp.evaluate(`({
     roomLocked: [...document.querySelectorAll('#room-list .room-row')].every((button) => button.disabled),
     sendEnabled: !document.querySelector('#send-button').disabled,
@@ -176,6 +184,7 @@ try {
   const attachmentUi = {
     ...attachmentSelection,
     ...attachmentBrowser,
+    deleteChip: attachmentDelete,
     download: attachmentBrowser.download === attachmentContent,
     byteDelivery: deliveredAttachment === attachmentContent,
   };

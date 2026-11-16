@@ -35,7 +35,11 @@ function element(tag, className, text) {
 async function api(path, options = {}) {
   const response = await fetch(path, { cache: "no-store", ...options });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(result.error ?? `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -85,8 +89,10 @@ function renderAttachments() {
         try {
           await api(`/api/attachments/${encodeURIComponent(item.attachment.id)}`, { method: "DELETE" });
         } catch (error) {
-          showToast(error.message);
-          return;
+          if (error.status !== 404) {
+            showToast(error.message);
+            return;
+          }
         }
       }
       selectedAttachments = selectedAttachments.filter((candidate) => candidate.clientId !== item.clientId);

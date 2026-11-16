@@ -58,6 +58,7 @@ export class Hub {
     promptAbsoluteTimeoutMs = 1_800_000,
     cancelGraceMs = 2_000,
     attachmentTtlMs = 86_400_000,
+    attachmentGcIntervalMs = 3_600_000,
   }) {
     this.root = root;
     this.statePath = statePath;
@@ -69,6 +70,9 @@ export class Hub {
     this.promptAbsoluteTimeoutMs = promptAbsoluteTimeoutMs;
     this.cancelGraceMs = cancelGraceMs;
     this.attachmentTtlMs = attachmentTtlMs;
+    this.attachmentGcIntervalMs = attachmentGcIntervalMs;
+    this.attachmentGcTimer = null;
+    this.attachmentCollection = null;
     this.stopping = false;
     this.listeners = new Set();
     this.state = null;
@@ -185,8 +189,14 @@ export class Hub {
     });
     await mkdir(dirname(this.statePath), { recursive: true });
     await this.attachmentStore.init();
-    await this.collectAbandonedAttachments();
+    await this.collectAbandonedAttachments(Date.now(), { temporaryOlderThanMs: 0 });
     await this.save();
+    if (this.attachmentGcIntervalMs > 0) {
+      this.attachmentGcTimer = setInterval(() => {
+        this.collectAbandonedAttachments().catch(() => {});
+      }, this.attachmentGcIntervalMs);
+      this.attachmentGcTimer.unref();
+    }
   }
 
   snapshot() {
@@ -547,21 +557,42 @@ export class Hub {
     return { removed: attachment.id };
   }
 
-  async collectAbandonedAttachments(now = Date.now()) {
+  collectAbandonedAttachments(now = Date.now(), { temporaryOlderThanMs = 60 * 60 * 1000 } = {}) {
+    if (this.attachmentCollection) return this.attachmentCollection;
+    this.attachmentCollection = this.#collectAbandonedAttachments(now, temporaryOlderThanMs)
+      .finally(() => { this.attachmentCollection = null; });
+    return this.attachmentCollection;
+  }
+
+  async #collectAbandonedAttachments(now, temporaryOlderThanMs) {
     const staleBefore = now - this.attachmentTtlMs;
     const stale = this.state.attachments.filter((attachment) => !attachment.messageId && new Date(attachment.createdAt).getTime() < staleBefore);
-    if (stale.length) {
-      const staleIds = new Set(stale.map((attachment) => attachment.id));
+    const staleIds = new Set(stale.map((attachment) => attachment.id));
+    const remainingIds = new Set(this.state.attachments.filter((attachment) => !staleIds.has(attachment.id)).map((attachment) => attachment.id));
+    const orphanReceiptKeys = Object.entries(this.state.attachmentReceipts)
+      .filter(([, attachmentId]) => !remainingIds.has(attachmentId))
+      .map(([key]) => key);
+    if (stale.length || orphanReceiptKeys.length) {
+      const previousAttachments = this.state.attachments;
+      const previousReceipts = this.state.attachmentReceipts;
       this.state.attachments = this.state.attachments.filter((attachment) => !staleIds.has(attachment.id));
-      for (const [key, id] of Object.entries(this.state.attachmentReceipts)) {
-        if (staleIds.has(id)) delete this.state.attachmentReceipts[key];
+      this.state.attachmentReceipts = { ...this.state.attachmentReceipts };
+      for (const key of orphanReceiptKeys) delete this.state.attachmentReceipts[key];
+      try {
+        await this.save();
+      } catch (error) {
+        this.state.attachments = previousAttachments;
+        this.state.attachmentReceipts = previousReceipts;
+        throw error;
       }
-      await Promise.all(stale.map((attachment) => this.attachmentStore.remove(attachment.id)));
     }
+    await Promise.all(stale.map((attachment) => this.attachmentStore.remove(attachment.id)));
     const referenced = new Set(this.state.attachments.map((attachment) => attachment.id));
     const orphans = (await this.attachmentStore.list()).filter((id) => !referenced.has(id));
     await Promise.all(orphans.map((id) => this.attachmentStore.remove(id)));
-    return { expired: stale.length, orphans: orphans.length };
+    const temporaries = await this.attachmentStore.listTemporary(temporaryOlderThanMs);
+    await Promise.all(temporaries.map((name) => this.attachmentStore.removeTemporary(name)));
+    return { expired: stale.length, orphans: orphans.length, temporaries: temporaries.length, receipts: orphanReceiptKeys.length };
   }
 
   async post({ text, clientMessageId, roomId = "army", attachmentIds = [] }) {
@@ -982,6 +1013,10 @@ export class Hub {
   async stop() {
     if (this.stopping) return;
     this.stopping = true;
+    if (this.attachmentGcTimer) {
+      clearInterval(this.attachmentGcTimer);
+      this.attachmentGcTimer = null;
+    }
     const queued = this.state.executions.filter((execution) => execution.status === "queued");
     const active = this.state.executions.filter((execution) => ["running", "waiting"].includes(execution.status));
     for (const execution of queued) {
