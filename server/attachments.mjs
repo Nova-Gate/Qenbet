@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { extname, resolve } from "node:path";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
 
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_MESSAGE = 4;
@@ -13,6 +13,7 @@ const EXTENSIONS = {
   "image/png": new Set([".png"]),
   "image/jpeg": new Set([".jpg", ".jpeg"]),
 };
+const TEMPORARY = /^[-a-f0-9]{36}\.\d+\.[-a-f0-9]{36}\.tmp$/;
 const problem = (message, status = 400) => Object.assign(new Error(message), { status });
 const digest = (content) => createHash("sha256").update(content).digest("hex");
 
@@ -86,6 +87,53 @@ export class AttachmentStore {
     const path = resolve(this.root, id);
     if (!/^[-a-f0-9]{36}$/.test(id) || !path.startsWith(`${this.root}/`)) throw problem("Invalid attachment storage identity.");
     return path;
+  }
+
+  async list(olderThanMs = 0) {
+    const entries = await readdir(this.root).catch((error) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    const cutoff = Date.now() - olderThanMs;
+    const files = [];
+    for (const name of entries.filter((entry) => /^[-a-f0-9]{36}$/.test(entry))) {
+      if (olderThanMs <= 0) {
+        files.push(name);
+        continue;
+      }
+      const info = await stat(join(this.root, name)).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (info && info.mtimeMs < cutoff) files.push(name);
+    }
+    return files;
+  }
+
+  async listTemporary(olderThanMs = 0) {
+    const entries = await readdir(this.root).catch((error) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    const cutoff = Date.now() - olderThanMs;
+    const temporaries = [];
+    for (const name of entries.filter((entry) => TEMPORARY.test(entry))) {
+      if (olderThanMs <= 0) {
+        temporaries.push(name);
+        continue;
+      }
+      const info = await stat(join(this.root, name)).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (info && info.mtimeMs < cutoff) temporaries.push(name);
+    }
+    return temporaries;
+  }
+
+  async removeTemporary(name) {
+    if (!TEMPORARY.test(name)) throw problem("Invalid attachment temporary identity.");
+    await rm(join(this.root, name), { force: true });
   }
 
   async save({ name, mediaType, body }) {

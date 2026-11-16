@@ -149,6 +149,22 @@ try {
   const fileInput = await cdp.send("DOM.querySelector", { nodeId: browserDocument.root.nodeId, selector: "#attachment-input" });
   await cdp.send("DOM.setFileInputFiles", { nodeId: fileInput.nodeId, files: [attachmentFixture] });
   await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
+  const deleteBefore = await (await fetch(new URL('/api/state', url))).json();
+  await cdp.evaluate(`document.querySelector('.attachment-chip .attachment-remove').click()`);
+  await cdp.wait(`!document.querySelector('.attachment-chip') && document.querySelector('#attachment-list').hidden`);
+  const deleteAfter = await (await fetch(new URL('/api/state', url))).json();
+  const attachmentDelete = deleteBefore.attachments.length === 1 && deleteAfter.attachments.length === 0;
+  await cdp.send("DOM.setFileInputFiles", { nodeId: fileInput.nodeId, files: [attachmentFixture] });
+  await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
+  const before404 = await (await fetch(new URL('/api/state', url))).json();
+  await fetch(new URL(`/api/attachments/${before404.attachments[0].id}`, url), { method: 'DELETE' });
+  await cdp.evaluate(`document.querySelector('.attachment-chip .attachment-remove').click()`);
+  await cdp.wait(`!document.querySelector('.attachment-chip') && document.querySelector('#attachment-list').hidden`);
+  const after404 = await (await fetch(new URL('/api/state', url))).json();
+  const attachmentDelete404 = after404.attachments.length === 0;
+  const fileInputAgain = await cdp.send("DOM.querySelector", { nodeId: browserDocument.root.nodeId, selector: "#attachment-input" });
+  await cdp.send("DOM.setFileInputFiles", { nodeId: fileInputAgain.nodeId, files: [attachmentFixture] });
+  await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
   const attachmentSelection = await cdp.evaluate(`({
     roomLocked: [...document.querySelectorAll('#room-list .room-row')].every((button) => button.disabled),
     sendEnabled: !document.querySelector('#send-button').disabled,
@@ -176,6 +192,8 @@ try {
   const attachmentUi = {
     ...attachmentSelection,
     ...attachmentBrowser,
+    deleteChip: attachmentDelete,
+    delete404: attachmentDelete404,
     download: attachmentBrowser.download === attachmentContent,
     byteDelivery: deliveredAttachment === attachmentContent,
   };
@@ -419,7 +437,11 @@ try {
   })`);
   await cdp.screenshot("mobile-agent-dialog");
   await cdp.evaluate(`document.querySelector('[data-dialog-close="agent-dialog"]').click(); document.querySelector('[data-close="inspector"]').click()`);
-  const report = { url, desktop, attachmentUi, supervision, registered, disabled, removed, roomScoped, roomReply, roomLifecycle, drawer, mobile, mobileApproval, mobileQuestion, mobileProgress, mobileAttachment, mobileForm, runtimeExceptions: failures };
+  const inputFont = await cdp.evaluate(`({
+    composer: parseFloat(getComputedStyle(document.querySelector('#message-input')).fontSize),
+    field: parseFloat(getComputedStyle(document.querySelector('#agent-name-input')).fontSize)
+  })`);
+  const report = { url, desktop, attachmentUi, supervision, registered, disabled, removed, roomScoped, roomReply, roomLifecycle, drawer, mobile, mobileApproval, mobileQuestion, mobileProgress, mobileAttachment, mobileForm, inputFont, runtimeExceptions: failures };
   await writeFile(join(artifacts, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report, null, 2));
   if (desktop.rooms !== 1 || desktop.agents !== 2 || !desktop.railVisible || !desktop.inspectorVisible || desktop.horizontalOverflow || !desktop.replyVisible) throw new Error("Desktop acceptance failed");
@@ -431,6 +453,7 @@ try {
   if (!mobile.railHidden || !mobile.inspectorClosed || !mobile.armySelected || !mobile.addressed || mobile.horizontalOverflow) throw new Error("Mobile acceptance failed");
   if (!mobileApproval || !mobileQuestion || !mobileProgress || !mobileAttachment) throw new Error("Mobile interaction acceptance failed");
   if (!mobileForm.fitsViewport || !mobileForm.singleColumn || !mobileForm.localFieldsVisible) throw new Error("Mobile form acceptance failed");
+  if (inputFont.composer < 16 || inputFont.field < 16) throw new Error("Form controls must use at least 16px text");
   if (failures.length) throw new Error("Browser runtime exceptions occurred");
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();

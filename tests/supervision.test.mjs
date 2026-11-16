@@ -273,7 +273,7 @@ test("bad OpenCode executables cannot crash the Hub and provider stderr is redac
 
   const fakeSecret = "unit-test-secret-123456789";
   const harness = join(directory, "secret-stderr-harness.sh");
-  await writeFile(harness, `#!/bin/sh\nprintf '%s\\n' 'provider token=${fakeSecret}' >&2\nexit 1\n`, { mode: 0o700 });
+  await writeFile(harness, `#!/bin/sh\nread line\nprintf '%s\\n' 'provider token=${fakeSecret}' >&2\nexit 1\n`, { mode: 0o700 });
   const secretAgent = await request(app, "/api/agents", jsonOptions("POST", {
     name: "Secret Failure",
     nodeId: "mac-mini",

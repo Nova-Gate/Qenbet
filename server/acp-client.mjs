@@ -252,13 +252,17 @@ export class AcpClient {
         reject(failure(`The prompt could not be sent: ${error.message}`, { dispatched: false, outcomeUnknown: false, prompt: true, fatal: true }));
       }
     });
-    const result = await promise;
-    await this.settleNotifications();
-    const answer = this.notifications.slice(baseline)
-      .filter((entry) => entry.sessionId === sessionId && entry.update?.sessionUpdate === "agent_message_chunk")
-      .map((entry) => entry.update.content?.text ?? "")
-      .join("");
-    return { answer, stopReason: result.stopReason };
+    try {
+      const result = await promise;
+      await this.settleNotifications();
+      const answer = this.notifications.slice(baseline)
+        .filter((entry) => entry.sessionId === sessionId && entry.update?.sessionUpdate === "agent_message_chunk")
+        .map((entry) => entry.update.content?.text ?? "")
+        .join("");
+      return { answer, stopReason: result.stopReason };
+    } finally {
+      this.notifications.length = 0;
+    }
   }
 
   pausePromptTimers() {
@@ -291,6 +295,7 @@ export class AcpClient {
       try {
         await this.request("session/load", { sessionId, cwd, mcpServers: [] });
         await this.settleNotifications();
+        this.notifications.length = 0;
         return sessionId;
       } catch (error) {
         if (!/not found/i.test(error.message)) throw error;
@@ -298,6 +303,7 @@ export class AcpClient {
     }
     const created = await this.request("session/new", { cwd, mcpServers: [] });
     await this.settleNotifications();
+    this.notifications.length = 0;
     return created.sessionId;
   }
 

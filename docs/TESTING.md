@@ -80,6 +80,7 @@ The integration tests verify:
 - Legacy-state attachment defaults and room deletion removing attachment metadata, receipts, and stored files.
 - Registry, room, conversation, execution, approval, attachment, and session persistence after an application restart.
 - Whole-name, longest-first, punctuation-boundary mentions (including `@Mini.`, `@everyone!`, and `@Mini, @Dell`); room-scoped idempotency with a version 6→7 migration that also handles colon-prefixed legacy keys; and post rollback of message, executions, receipt, and attachment binding.
+- Deletion of unsent attachments, hourly expiry sweeps, temporary-file cleanup, grace-gated orphan collection, the sweep/upload race (a delayed listing with an upload completing inside it), orphan-receipt removal, SSE change delivery, and bounded ACP notification retention.
 
 ## Real OpenCode acceptance
 
@@ -192,7 +193,6 @@ Each fake workspace contains `execution-proof.json`, `last-prompt.txt`, and `eve
 
 These are open defects, not out-of-scope limitations. Do not rely on the affected behaviour and do not treat a passing offline suite as coverage of them.
 
-- **Abandoned attachment uploads cannot be deleted**; selecting a file uploads it immediately, and removing the chip only forgets it in the browser.
 - **A concurrent duplicate post during a failing save** can receive the message that the failed save then rolls back; the retry path is safe, the in-flight response is not.
 - **Mention separator consumption covers whitespace and `, ; : . ! ?`**; a mention followed by `)` and then another mention (`@Mini) @Dell`) addresses only the first.
 - **A remote ACP agent receives the Hub-side workspace path as `cwd`.**
