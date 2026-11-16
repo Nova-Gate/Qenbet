@@ -159,7 +159,7 @@ Implemented and tested:
 - Room-bound approval/rejection and native question accept/decline/cancel controls on desktop and at 390 px.
 - Desktop and 390 px mobile chat, drawer, attachment, management-form, and OpenCode-form acceptance.
 - Configurable idle and absolute prompt timeouts, `session/cancel` with bounded grace and process-group kill, dispatch-aware `unknown` versus `failed` classification, approval-paused timers with a visible deadline and room badge, and bounded SIGTERM shutdown, covered by `tests/lifecycle.test.mjs`.
-- Deletion of unsent attachments, 24-hour expiry with orphan-byte collection at boot, 16px form controls, SSE change delivery, and bounded ACP notification retention.
+- Deletion of unsent attachments, 24-hour expiry swept hourly and at boot, temporary-file and orphan-byte cleanup, 16px form controls, SSE change delivery, and bounded ACP notification retention.
 
 Known gaps (open):
 
