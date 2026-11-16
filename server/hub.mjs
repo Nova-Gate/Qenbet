@@ -189,11 +189,13 @@ export class Hub {
     });
     await mkdir(dirname(this.statePath), { recursive: true });
     await this.attachmentStore.init();
-    await this.collectAbandonedAttachments(Date.now(), { temporaryOlderThanMs: 0 });
+    await this.collectAbandonedAttachments(Date.now(), { temporaryOlderThanMs: 0, orphanOlderThanMs: 0 });
     await this.save();
     if (this.attachmentGcIntervalMs > 0) {
       this.attachmentGcTimer = setInterval(() => {
-        this.collectAbandonedAttachments().catch(() => {});
+        this.collectAbandonedAttachments().catch((error) => {
+          console.error(`Attachment sweep failed: ${redactError(error.message)}`);
+        });
       }, this.attachmentGcIntervalMs);
       this.attachmentGcTimer.unref();
     }
@@ -557,14 +559,14 @@ export class Hub {
     return { removed: attachment.id };
   }
 
-  collectAbandonedAttachments(now = Date.now(), { temporaryOlderThanMs = 60 * 60 * 1000 } = {}) {
+  collectAbandonedAttachments(now = Date.now(), { temporaryOlderThanMs = 60 * 60 * 1000, orphanOlderThanMs = 60 * 60 * 1000 } = {}) {
     if (this.attachmentCollection) return this.attachmentCollection;
-    this.attachmentCollection = this.#collectAbandonedAttachments(now, temporaryOlderThanMs)
+    this.attachmentCollection = this.#collectAbandonedAttachments(now, temporaryOlderThanMs, orphanOlderThanMs)
       .finally(() => { this.attachmentCollection = null; });
     return this.attachmentCollection;
   }
 
-  async #collectAbandonedAttachments(now, temporaryOlderThanMs) {
+  async #collectAbandonedAttachments(now, temporaryOlderThanMs, orphanOlderThanMs) {
     const staleBefore = now - this.attachmentTtlMs;
     const stale = this.state.attachments.filter((attachment) => !attachment.messageId && new Date(attachment.createdAt).getTime() < staleBefore);
     const staleIds = new Set(stale.map((attachment) => attachment.id));
@@ -587,8 +589,9 @@ export class Hub {
       }
     }
     await Promise.all(stale.map((attachment) => this.attachmentStore.remove(attachment.id)));
+    const files = await this.attachmentStore.list(orphanOlderThanMs);
     const referenced = new Set(this.state.attachments.map((attachment) => attachment.id));
-    const orphans = (await this.attachmentStore.list()).filter((id) => !referenced.has(id));
+    const orphans = files.filter((id) => !referenced.has(id));
     await Promise.all(orphans.map((id) => this.attachmentStore.remove(id)));
     const temporaries = await this.attachmentStore.listTemporary(temporaryOlderThanMs);
     await Promise.all(temporaries.map((name) => this.attachmentStore.removeTemporary(name)));
@@ -1017,6 +1020,7 @@ export class Hub {
       clearInterval(this.attachmentGcTimer);
       this.attachmentGcTimer = null;
     }
+    if (this.attachmentCollection) await this.attachmentCollection.catch(() => {});
     const queued = this.state.executions.filter((execution) => execution.status === "queued");
     const active = this.state.executions.filter((execution) => ["running", "waiting"].includes(execution.status));
     for (const execution of queued) {

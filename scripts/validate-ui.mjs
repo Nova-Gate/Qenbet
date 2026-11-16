@@ -154,6 +154,14 @@ try {
   await cdp.wait(`!document.querySelector('.attachment-chip') && document.querySelector('#attachment-list').hidden`);
   const deleteAfter = await (await fetch(new URL('/api/state', url))).json();
   const attachmentDelete = deleteBefore.attachments.length === 1 && deleteAfter.attachments.length === 0;
+  await cdp.send("DOM.setFileInputFiles", { nodeId: fileInput.nodeId, files: [attachmentFixture] });
+  await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
+  const before404 = await (await fetch(new URL('/api/state', url))).json();
+  await fetch(new URL(`/api/attachments/${before404.attachments[0].id}`, url), { method: 'DELETE' });
+  await cdp.evaluate(`document.querySelector('.attachment-chip .attachment-remove').click()`);
+  await cdp.wait(`!document.querySelector('.attachment-chip') && document.querySelector('#attachment-list').hidden`);
+  const after404 = await (await fetch(new URL('/api/state', url))).json();
+  const attachmentDelete404 = after404.attachments.length === 0;
   const fileInputAgain = await cdp.send("DOM.querySelector", { nodeId: browserDocument.root.nodeId, selector: "#attachment-input" });
   await cdp.send("DOM.setFileInputFiles", { nodeId: fileInputAgain.nodeId, files: [attachmentFixture] });
   await cdp.wait(`document.querySelector('.attachment-chip[data-status="ready"]')`);
@@ -185,6 +193,7 @@ try {
     ...attachmentSelection,
     ...attachmentBrowser,
     deleteChip: attachmentDelete,
+    delete404: attachmentDelete404,
     download: attachmentBrowser.download === attachmentContent,
     byteDelivery: deliveredAttachment === attachmentContent,
   };

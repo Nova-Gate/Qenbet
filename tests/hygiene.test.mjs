@@ -87,9 +87,12 @@ test("abandoned attachments expire and orphan bytes are collected", async (t) =>
   await writeFile(join(directory, "attachments", orphanId), "orphan bytes");
   const collected = await hub.collectAbandonedAttachments();
   assert.equal(collected.expired, 1);
-  assert.ok(collected.orphans >= 1);
+  assert.equal(collected.orphans, 0, "a fresh orphan is inside the grace window");
+  assert.equal(await readFile(join(directory, "attachments", orphanId), "utf8"), "orphan bytes");
   assert.equal(hub.state.attachments.some((attachment) => attachment.id === stale.attachment.id), false);
   assert.ok(hub.state.attachments.some((attachment) => attachment.id === fresh.attachment.id));
+  const bootPass = await hub.collectAbandonedAttachments(Date.now(), { orphanOlderThanMs: 0 });
+  assert.ok(bootPass.orphans >= 1);
   await assert.rejects(readFile(join(directory, "attachments", orphanId)), /ENOENT/);
 });
 
@@ -221,4 +224,28 @@ test("a failed sweep save leaves the attachment bytes in place", async (t) => {
   await assert.rejects(hub.collectAbandonedAttachments(), /simulated save failure/);
   assert.ok(hub.state.attachments.some((attachment) => attachment.id === uploaded.attachment.id));
   assert.equal((await readFile(join(directory, "attachments", uploaded.attachment.id))).length > 0, true);
+});
+
+test("a sweep that lists during an upload keeps the new file", async (t) => {
+  const { hub, directory } = await makeHub();
+  t.after(async () => { await hub.stop(); await rm(directory, { recursive: true, force: true }); });
+  const originalList = hub.attachmentStore.list.bind(hub.attachmentStore);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  hub.attachmentStore.list = async (olderThanMs = 0) => {
+    await gate;
+    return originalList(olderThanMs);
+  };
+  const sweep = hub.collectAbandonedAttachments(Date.now(), { temporaryOlderThanMs: 0, orphanOlderThanMs: 0 });
+  const uploaded = await hub.uploadAttachment("army", {
+    name: "race.txt",
+    mediaType: "text/plain",
+    clientAttachmentId: "race",
+    body: Readable.from([Buffer.from("race bytes")]),
+  });
+  release();
+  await sweep;
+  hub.attachmentStore.list = originalList;
+  const content = await hub.attachmentContent(uploaded.attachment.id);
+  assert.equal(content.content.toString("utf8"), "race bytes");
 });

@@ -89,12 +89,25 @@ export class AttachmentStore {
     return path;
   }
 
-  async list() {
+  async list(olderThanMs = 0) {
     const entries = await readdir(this.root).catch((error) => {
       if (error.code === "ENOENT") return [];
       throw error;
     });
-    return entries.filter((name) => /^[-a-f0-9]{36}$/.test(name));
+    const cutoff = Date.now() - olderThanMs;
+    const files = [];
+    for (const name of entries.filter((entry) => /^[-a-f0-9]{36}$/.test(entry))) {
+      if (olderThanMs <= 0) {
+        files.push(name);
+        continue;
+      }
+      const info = await stat(join(this.root, name)).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (info && info.mtimeMs < cutoff) files.push(name);
+    }
+    return files;
   }
 
   async listTemporary(olderThanMs = 0) {
@@ -109,8 +122,11 @@ export class AttachmentStore {
         temporaries.push(name);
         continue;
       }
-      const info = await stat(join(this.root, name));
-      if (info.mtimeMs < cutoff) temporaries.push(name);
+      const info = await stat(join(this.root, name)).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (info && info.mtimeMs < cutoff) temporaries.push(name);
     }
     return temporaries;
   }

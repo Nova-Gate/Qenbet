@@ -85,7 +85,8 @@ function renderAttachments() {
     remove.disabled = sending;
     remove.setAttribute("aria-label", `Remove ${item.file.name}`);
     remove.addEventListener("click", async () => {
-      if (item.status === "ready" && item.attachment) {
+      if (item.status === "uploading") item.controller?.abort();
+      else if (item.status === "ready" && item.attachment) {
         try {
           await api(`/api/attachments/${encodeURIComponent(item.attachment.id)}`, { method: "DELETE" });
         } catch (error) {
@@ -118,12 +119,14 @@ async function uploadSelectedAttachment(item) {
         "X-Client-Attachment-Id": item.clientId,
       },
       body: item.file,
+      signal: item.controller.signal,
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? `Upload failed (${response.status})`);
     item.attachment = result.attachment;
     item.status = "ready";
   } catch (error) {
+    if (error.name === "AbortError") return;
     item.status = "error";
     item.error = error.message;
   }
@@ -147,7 +150,7 @@ function selectAttachments(files) {
       showToast(`${file.name}: files must be between 1 byte and ${formatBytes(maximumBytes)}.`);
       continue;
     }
-    const item = { clientId: crypto.randomUUID(), roomId: currentRoomId, file, mediaType, status: "uploading", attachment: null, error: null };
+    const item = { clientId: crypto.randomUUID(), roomId: currentRoomId, file, mediaType, status: "uploading", attachment: null, error: null, controller: new AbortController() };
     selectedAttachments.push(item);
     void uploadSelectedAttachment(item);
   }
