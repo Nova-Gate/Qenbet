@@ -858,6 +858,7 @@ function updateTransportFields() {
     document.querySelector("#agent-state").value = `runtime/hub/agents/${suffix}-state`;
     document.querySelector("#agent-central-workspace").value = `runtime/hub/agents/${suffix}-central`;
   }
+  updateArgumentsPreview();
 }
 document.querySelector("#agent-transport").addEventListener("change", () => {
   const transport = document.querySelector("#agent-transport").value;
@@ -866,9 +867,14 @@ document.querySelector("#agent-transport").addEventListener("change", () => {
   }
   updateTransportFields();
 });
-document.querySelector("#agent-acp-args").addEventListener("input", () => {
+function updateArgumentsPreview() {
   const field = document.querySelector("#agent-acp-args");
   const preview = document.querySelector("#acp-args-preview");
+  if (document.querySelector("#agent-transport").value !== "local-acp") {
+    field.setCustomValidity("");
+    preview.textContent = "Space-separated; quote paths with spaces.";
+    return;
+  }
   try {
     const args = parseArguments(field.value);
     field.setCustomValidity("");
@@ -877,7 +883,8 @@ document.querySelector("#agent-acp-args").addEventListener("input", () => {
     field.setCustomValidity(error.message);
     preview.textContent = error.message;
   }
-});
+}
+document.querySelector("#agent-acp-args").addEventListener("input", updateArgumentsPreview);
 document.querySelector("#acp-env-add").addEventListener("click", addEnvironmentRow);
 document.querySelector("#add-agent-button").addEventListener("click", () => openAgentDialog());
 
@@ -887,8 +894,9 @@ document.querySelector("#agent-form").addEventListener("submit", async (event) =
   const save = document.querySelector("#save-agent-button");
   save.disabled = true;
   try {
-    const args = parseArguments(document.querySelector("#agent-acp-args").value);
-    const env = collectEnvironment();
+    const transport = document.querySelector("#agent-transport").value;
+    const args = transport === "local-acp" ? parseArguments(document.querySelector("#agent-acp-args").value) : [];
+    const env = transport === "local-acp" ? collectEnvironment() : {};
     await api(id ? `/api/agents/${encodeURIComponent(id)}` : "/api/agents", {
       method: id ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },

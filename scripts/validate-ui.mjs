@@ -354,6 +354,41 @@ try {
   await cdp.wait(`document.querySelectorAll('#agent-list .agent-row').length === 2 && !document.querySelector('#agent-dialog').open`);
   const removed = await cdp.evaluate(`!document.querySelector('#agent-list').textContent.includes('Browser Helper')`);
 
+  const customHarness = resolve(root, "connectors/remote-acp/fake-harness.mjs");
+  const customWorkspace = resolve(root, "runtime/ui-validation/custom-workspace");
+  await cdp.evaluate(`document.querySelector('#add-agent-button').click()`);
+  await cdp.wait(`document.querySelector('#agent-dialog').open`);
+  await cdp.evaluate(`(() => {
+    document.querySelector('#agent-name-input').value = 'Custom UI';
+    document.querySelector('#agent-node-input').value = 'mac-mini';
+    document.querySelector('#agent-transport').value = 'local-acp';
+    document.querySelector('#agent-transport').dispatchEvent(new Event('change'));
+    document.querySelector('#agent-command').value = ${JSON.stringify(process.execPath)};
+    document.querySelector('#agent-acp-args').value = ${JSON.stringify(`"${customHarness}"`)};
+    document.querySelector('#agent-central-workspace').value = ${JSON.stringify(customWorkspace)};
+    const env = ${JSON.stringify({
+      QENBET_NODE_ID: "mac-mini",
+      QENBET_AGENT_TITLE: "Custom UI",
+      QENBET_WORKSPACE: customWorkspace,
+      QENBET_STATE_ROOT: resolve(root, "runtime/ui-validation/custom-state"),
+    })};
+    for (const [name, value] of Object.entries(env)) {
+      document.querySelector('#acp-env-add').click();
+      const inputs = document.querySelectorAll('#acp-env-rows .env-row:last-child input');
+      inputs[0].value = name;
+      inputs[1].value = value;
+    }
+    document.querySelector('#agent-form').requestSubmit();
+  })()`);
+  await cdp.wait(`document.querySelectorAll('#agent-list .agent-row').length === 3 && !document.querySelector('#agent-dialog').open`);
+  await cdp.evaluate(`[...document.querySelectorAll('.agent-row')].find((row) => row.textContent.includes('Custom UI')).querySelector('.agent-test').click()`);
+  await cdp.wait(`[...document.querySelectorAll('.agent-row')].find((row) => row.textContent.includes('Custom UI')).textContent.includes('AVAILABLE')`);
+  const customAgent = await cdp.evaluate(`[...document.querySelectorAll('.agent-row')].find((row) => row.textContent.includes('Custom UI')).textContent.includes('custom-acp')`);
+  await cdp.evaluate(`[...document.querySelectorAll('.agent-row')].find((row) => row.textContent.includes('Custom UI')).querySelector('.agent-edit').click()`);
+  await cdp.wait(`document.querySelector('#agent-dialog').open`);
+  await cdp.evaluate(`window.confirm = () => true; document.querySelector('#remove-agent-button').click()`);
+  await cdp.wait(`document.querySelectorAll('#agent-list .agent-row').length === 2 && !document.querySelector('#agent-dialog').open`);
+
   await cdp.evaluate(`document.querySelector('#add-room-button').click()`);
   await cdp.wait(`document.querySelector('#room-dialog').open`);
   await cdp.evaluate(`(() => {
@@ -462,13 +497,13 @@ try {
     composer: parseFloat(getComputedStyle(document.querySelector('#message-input')).fontSize),
     field: parseFloat(getComputedStyle(document.querySelector('#agent-name-input')).fontSize)
   })`);
-  const report = { url, desktop, attachmentUi, supervision, registered, disabled, removed, roomScoped, roomReply, roomLifecycle, drawer, mobile, mobileApproval, mobileQuestion, mobileProgress, mobileAttachment, mobileForm, inputFont, runtimeExceptions: failures };
+  const report = { url, desktop, attachmentUi, supervision, registered, disabled, removed, customAgent, roomScoped, roomReply, roomLifecycle, drawer, mobile, mobileApproval, mobileQuestion, mobileProgress, mobileAttachment, mobileForm, inputFont, runtimeExceptions: failures };
   await writeFile(join(artifacts, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report, null, 2));
   if (desktop.rooms !== 1 || desktop.agents !== 2 || !desktop.railVisible || !desktop.inspectorVisible || desktop.horizontalOverflow || !desktop.replyVisible) throw new Error("Desktop acceptance failed");
   if (!Object.values(attachmentUi).every(Boolean)) throw new Error("Browser attachment acceptance failed");
   if (!Object.values(supervision).every(Boolean)) throw new Error("Browser supervision acceptance failed");
-  if (!registered || !disabled || !removed) throw new Error("Agent management acceptance failed");
+  if (!registered || !disabled || !removed || !customAgent) throw new Error("Agent management acceptance failed");
   if (roomScoped.rooms !== 2 || !roomScoped.mini || !roomScoped.dellExcluded || !roomReply || !Object.values(roomLifecycle).every(Boolean)) throw new Error("Room management acceptance failed");
   if (!drawer.inspectorOpen || !drawer.backdropVisible || drawer.horizontalOverflow) throw new Error("Mobile drawer acceptance failed");
   if (!mobile.railHidden || !mobile.inspectorClosed || !mobile.armySelected || !mobile.addressed || mobile.horizontalOverflow) throw new Error("Mobile acceptance failed");

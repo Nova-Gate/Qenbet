@@ -8,7 +8,7 @@ The repository contains a runnable, account-free application with:
 - A persistent agent registry with add, edit, disable, re-enable, and remove controls.
 - Deterministic local-fake and authenticated remote-ACP execution.
 - A real local OpenCode ACP adapter with configurable CLI and workspace paths, native file tools, and durable native sessions.
-- A custom ACP adapter that launches any ACP-speaking command with operator-supplied arguments and non-secret environment.
+- A custom ACP adapter that launches any ACP-speaking command with operator-supplied arguments and non-secret environment, rejects credential-like names, values, and arguments, and preserves the native session across presentation-only edits.
 - Live updates over server-sent events.
 - Node identity on every agent reply.
 - Workspace selection and execution-proof evidence.
@@ -39,9 +39,9 @@ npm run test:opencode-supervision  # live question/approval/stop/failure gate; f
 
 `tests/lifecycle.test.mjs` covers idle and absolute prompt timeouts with cancellation and process-group kill, a queued follow-up that cannot start until the timed-out process exits, pre-dispatch versus post-dispatch failure classification, approval-paused timers, wedged-client retirement after a session timeout or a malformed stream, waiting-approval shutdown, concurrent multi-agent shutdown, shutdown awaiting an in-flight retirement, orphan cleanup, and a real SIGTERM deadline with exit code 0. Server lifecycle defaults are `--prompt-idle-timeout-ms 600000`, `--prompt-absolute-timeout-ms 1800000`, `--approval-timeout-ms 600000`, `--shutdown-grace-ms 5000`, and `--shutdown-deadline-ms 12000`; `--request-timeout-ms` bounds handshake and session requests.
 
-`tests/custom-acp.test.mjs` covers shell-style argument tokenization, command/argument/environment validation, secret-name rejection, unique workspaces, argument and environment propagation, a bad command, and a full custom-agent turn through the shared queue.
+`tests/custom-acp.test.mjs` covers shell-style argument tokenization, command/argument/environment validation, credential-name, credential-value, and secret-argument rejection, unique workspaces, argument and environment propagation, empty and space-preserving arguments, a bad command, a full custom-agent turn through the shared queue, and session preservation across color edits versus reset on execution-field edits.
 
-The browser command starts an isolated temporary server on a random port, uses separate runtime state, exercises the real file input through Chrome, verifies attachment chips, room locking, message metadata, exact downloads, agent-received bytes, and 390 px layout, then covers pending/completed progress, command/output, plans, failures, visible permission details, and native question accept/decline flows. It writes screenshots and a report under `artifacts/ui-validation/` and stops its temporary processes. It does not replace the persistent service or modify its state. GitHub Actions runs `npm run check` and `npm test` for every pull request and push to `main`; browser and live provider tests remain local acceptance gates.
+The browser command starts an isolated temporary server on a random port, uses separate runtime state, exercises the real file input through Chrome, verifies attachment chips, room locking, message metadata, exact downloads, agent-received bytes, and 390 px layout, then covers pending/completed progress, command/output, plans, failures, visible permission details, native question accept/decline flows, and saving, checking, and removing a custom ACP agent. It writes screenshots and a report under `artifacts/ui-validation/` and stops its temporary processes. It does not replace the persistent service or modify its state. GitHub Actions runs `npm run check` and `npm test` for every pull request and push to `main`; browser and live provider tests remain local acceptance gates.
 
 The integration tests verify:
 
