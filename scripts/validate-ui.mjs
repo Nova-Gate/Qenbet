@@ -486,11 +486,19 @@ try {
   await cdp.screenshot("mobile");
   await cdp.evaluate(`document.querySelector('#agents-button').click(); document.querySelector('#add-agent-button').click()`);
   await cdp.wait(`document.querySelector('#agent-dialog').open`);
-  const mobileForm = await cdp.evaluate(`({
+  const mobileLocalFields = await cdp.evaluate(`!document.querySelector('#local-agent-fields').hidden`);
+  await cdp.evaluate(`(() => {
+    document.querySelector('#agent-transport').value = 'local-acp';
+    document.querySelector('#agent-transport').dispatchEvent(new Event('change'));
+    document.querySelector('#acp-env-add').click();
+  })()`);
+  const mobileCustom = await cdp.evaluate(`({
     fitsViewport: document.querySelector('#agent-dialog').getBoundingClientRect().width <= innerWidth,
     singleColumn: getComputedStyle(document.querySelector('#agent-form .form-grid')).gridTemplateColumns.split(' ').length === 1,
-    localFieldsVisible: !document.querySelector('#local-agent-fields').hidden
+    customFieldsVisible: !document.querySelector('#acp-env-fields').hidden,
+    customFits: document.querySelector('#acp-env-fields').getBoundingClientRect().right <= innerWidth && document.documentElement.scrollWidth <= innerWidth
   })`);
+  const mobileForm = { ...mobileCustom, localFieldsVisible: mobileLocalFields };
   await cdp.screenshot("mobile-agent-dialog");
   await cdp.evaluate(`document.querySelector('[data-dialog-close="agent-dialog"]').click(); document.querySelector('[data-close="inspector"]').click()`);
   const inputFont = await cdp.evaluate(`({
@@ -508,7 +516,7 @@ try {
   if (!drawer.inspectorOpen || !drawer.backdropVisible || drawer.horizontalOverflow) throw new Error("Mobile drawer acceptance failed");
   if (!mobile.railHidden || !mobile.inspectorClosed || !mobile.armySelected || !mobile.addressed || mobile.horizontalOverflow) throw new Error("Mobile acceptance failed");
   if (!mobileApproval || !mobileQuestion || !mobileProgress || !mobileAttachment) throw new Error("Mobile interaction acceptance failed");
-  if (!mobileForm.fitsViewport || !mobileForm.singleColumn || !mobileForm.localFieldsVisible) throw new Error("Mobile form acceptance failed");
+  if (!mobileForm.fitsViewport || !mobileForm.singleColumn || !mobileForm.localFieldsVisible || !mobileForm.customFieldsVisible || !mobileForm.customFits) throw new Error("Mobile form acceptance failed");
   if (inputFont.composer < 16 || inputFont.field < 16) throw new Error("Form controls must use at least 16px text");
   if (failures.length) throw new Error("Browser runtime exceptions occurred");
 } finally {

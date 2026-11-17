@@ -232,6 +232,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .form-grid, .config-fields { grid-template-columns: 1fr; }
   .field-wide { grid-column: auto; }
   .member-options { grid-template-columns: 1fr; }
+  .env-row { grid-template-columns: 1fr auto; }
+  .env-row input:first-of-type { grid-column: 1 / -1; }
   .dialog-actions { flex-wrap: wrap; }
 }
 .room-badge { margin-left: auto; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border: 1px solid var(--navy); border-radius: 20px; background: var(--pink); font-family: var(--mono); font-size: 10px; font-weight: 800; }

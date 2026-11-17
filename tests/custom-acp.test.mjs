@@ -120,6 +120,14 @@ test("custom ACP validation rejects missing commands, bad arguments, and secrets
   await assert.rejects(hub.createAgent(customAgent(directory, { env: { OPENAI_KEY: "secret" } })), /looks like a credential/);
   await assert.rejects(hub.createAgent(customAgent(directory, { env: { AWS_ACCESS_KEY_ID: "secret" } })), /looks like a credential/);
   await assert.rejects(hub.createAgent(customAgent(directory, { env: { SAFE_FLAG: "sk-1234567890abcdef" } })), /looks like a credential/);
+  await assert.rejects(hub.createAgent(customAgent(directory, { env: { GITHUB_PAT: "x" } })), /looks like a credential/);
+  const credentialValues = ["github_pat_ABC123", "xoxb-1234567890-abcdef", "AIza" + "A".repeat(35), "glpat-" + "a".repeat(20), "npm_" + "a".repeat(36), "hf_" + "a".repeat(34)];
+  for (const value of credentialValues) {
+    await assert.rejects(hub.createAgent(customAgent(directory, { env: { SAFE_FLAG: value } })), /looks like a credential/);
+  }
+  for (const flag of ["--github-token", "--access-token", "--api-token", "--bearer", "--header", "--client-secret"]) {
+    await assert.rejects(hub.createAgent(customAgent(directory, { args: [flag, "value"] })), /must not carry provider secrets/);
+  }
   await assert.rejects(hub.createAgent(customAgent(directory, { args: ["--api-key", "value"] })), /must not carry provider secrets/);
   await assert.rejects(hub.createAgent(customAgent(directory, { args: ["AKIAABCDEFGHIJKLMNOP"] })), /must not carry provider secrets/);
   await assert.rejects(hub.createAgent(customAgent(directory, { env: { FLAG: 1 } })), /must be text/);
