@@ -303,6 +303,27 @@ try {
   const opencodeFields = await cdp.evaluate(`!document.querySelector('#opencode-agent-fields').hidden && document.querySelector('#agent-command').required && document.querySelector('#agent-central-workspace').required && document.querySelector('#central-workspace-label').textContent === 'OpenCode workspace'`);
   if (!opencodeFields) throw new Error("OpenCode agent form acceptance failed");
   await cdp.evaluate(`(() => {
+    document.querySelector('#agent-transport').value = 'local-acp';
+    document.querySelector('#agent-transport').dispatchEvent(new Event('change'));
+    document.querySelector('#agent-acp-args').value = '"quoted value" --flag';
+    document.querySelector('#agent-acp-args').dispatchEvent(new Event('input'));
+    document.querySelector('#acp-env-add').click();
+    const inputs = document.querySelectorAll('#acp-env-rows .env-row input');
+    inputs[0].value = 'ELECTRON_RUN_AS_NODE';
+    inputs[1].value = '1';
+  })()`);
+  const customAcpForm = await cdp.evaluate(`({
+    argsVisible: !document.querySelector('#acp-args-fields').hidden,
+    envVisible: !document.querySelector('#acp-env-fields').hidden,
+    commandLabel: document.querySelector('#command-label').textContent === 'Command',
+    workspaceLabel: document.querySelector('#central-workspace-label').textContent === 'ACP workspace',
+    preview: document.querySelector('#acp-args-preview').textContent,
+    envRows: document.querySelectorAll('#acp-env-rows .env-row').length
+  })`);
+  if (!customAcpForm.argsVisible || !customAcpForm.envVisible || !customAcpForm.commandLabel || !customAcpForm.workspaceLabel || customAcpForm.preview !== '2 arguments' || customAcpForm.envRows !== 1) {
+    throw new Error(`Custom ACP agent form acceptance failed: ${JSON.stringify(customAcpForm)}`);
+  }
+  await cdp.evaluate(`(() => {
     document.querySelector('#agent-transport').value = 'local-fake';
     document.querySelector('#agent-transport').dispatchEvent(new Event('change'));
     document.querySelector('#agent-central-workspace').value = 'runtime/hub/browser-helper-central';

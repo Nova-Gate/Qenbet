@@ -58,6 +58,14 @@ export class AgentRuntime {
         args: ["acp"],
         cwd: this.workspace(agent),
       });
+    } else if (agent.transport === "local-acp") {
+      client = new AcpClient({
+        ...common,
+        command: agent.command,
+        args: agent.args ?? [],
+        env: agent.env ?? {},
+        cwd: this.workspace(agent),
+      });
     } else {
       client = new AcpClient({
         ...common,

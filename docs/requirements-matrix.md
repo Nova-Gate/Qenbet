@@ -30,7 +30,7 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 - **M1:** Exit gate passed 2026-11-02, but EXEC-03 is now Partial: the 2026-11-12 review found that shutdown drains instead of interrupting and that the prompt timeout does not cancel the native turn. M1 re-closes when the lifecycle gate passes.
 - **M2:** Active; real OpenCode native execution, session resume, supervision, detailed approvals, native form questions, rich progress, and deliberate attachments passed on 2026-11-03, while FILE-02 generated-file return remains open.
 - **M3–M5:** Planned; see `docs/migration-plan.md`.
-- **Lifecycle change:** implemented and offline-verified on 2026-11-12 (LIFE 13/13, 53/53 offline, UI acceptance). The live REAL-SUP gate is not reproducible on OpenCode 2.2.5 because the agent intermittently declines the required tools; EXEC-03 and EXEC-04 stay Partial until a live re-run passes. FILE-02 remains next.
+- **Lifecycle change:** implemented and offline-verified on 2026-11-12 (LIFE 13/13, 59/59 offline, UI acceptance). The live REAL-SUP gate is not reproducible on OpenCode 2.2.5 because the agent intermittently declines the required tools; EXEC-03 and EXEC-04 stay Partial until a live re-run passes. FILE-02 remains next.
 - No P0/P1 requirement may be called Done from implementation alone; the evidence column must actually pass.
 
 ## Core application and state
@@ -55,9 +55,9 @@ Every evidence entry must cite the commit SHA it ran against, the run date, and 
 | ID | Milestone | Status | Acceptance evidence |
 |---|---|---|---|
 | AGENT-01 | M0 | Done | APP and UI cover add, rename, disable, re-enable, resume, removal, duplicate-name rejection, and history preservation. |
-| AGENT-02 | M2 | Done | APP/ACP prove the shared runtime over local-fake and remote-ACP; REAL drives real OpenCode through the same queue, session, execution, and reply boundary. |
+| AGENT-02 | M2 | Done | APP/ACP prove the shared runtime over local-fake and remote-ACP; REAL drives real OpenCode through the same queue, session, execution, and reply boundary; the custom `local-acp` transport runs an operator-supplied command, arguments, and non-secret environment through the same boundary. |
 | AGENT-03 | M1 | Done | SUP verifies available, unavailable, misconfigured, disabled, and session/unknown transitions; REAL verifies OpenCode availability; UI runs connectivity checks and displays health. |
-| AGENT-04 | M2 | Done | REAL passes two live OpenCode turns: exact native file creation, isolated task artifacts, correct identity/lifecycle, no provider credential fields in registry state, and the same native session recalling its token after Hub restart. DSH and other harnesses remain independent future adapters. |
+| AGENT-04 | M2 | Done | REAL passes two live OpenCode turns: exact native file creation, isolated task artifacts, correct identity/lifecycle, no provider credential fields in registry state, and the same native session recalling its token after Hub restart. The custom `local-acp` transport connects DeepSeek Harness's `--profile acp` in a connectivity check; a live DSH turn is not yet claimed. |
 
 ## Execution supervision and reliability
 
@@ -143,7 +143,7 @@ Implemented: configurable idle and absolute prompt timeouts with `session/cancel
 Evidence:
 
 - **LIFE:** 13/13 pass — idle and absolute timeouts become `unknown` with their process gone; a queued follow-up cannot start until the timed-out process has exited (no overlap file); a pre-dispatch failure is `failed` and a post-dispatch transport loss is `unknown`; approval timers pause; a session-request timeout and a malformed stream retire the wedged client; shutdown leaves `unknown` and `interrupted`, resolves a waiting approval, rejects new posts, writes no reply after stopping, stops several agents concurrently, awaits an in-flight retirement before returning, and a real SIGTERM exits with code 0 inside the asserted bound, with no deadline log and no orphan process.
-- **Offline suite:** 53/53 pass on Node 26.7.0.
+- **Offline suite:** 59/59 pass on Node 26.7.0.
 - **UI:** pass, including `.approval-countdown` and `.room-badge` assertions, with no runtime exceptions.
 
 Blocked: the live REAL-SUP gate. Five attempts on 2026-11-12 against OpenCode CLI 2.2.5 failed at different tool-use steps (the agent answered without asking, declined `sleep 60`, or skipped the permission request). Approval and question round trips each passed in at least one attempt. The November evidence was produced with CLI 2.0.26, which is no longer installed, so EXEC-03 and EXEC-04 stay Partial until a live run against the installed CLI passes.
@@ -152,4 +152,4 @@ Gate for FILE-02 and M3: a green REAL-SUP run, then re-run LIFE and the real fil
 
 ## Current release conclusion
 
-Qenbet is a verified local application with M2 active, not full-feature V1. The 2026-11-12 lifecycle change implements the EXEC-03 and EXEC-04 fixes and passes its offline gate, but both stay Partial until the live supervision gate passes on the installed CLI. All 53 offline tests pass, desktop and 390 px browser acceptance passes, and one real OpenCode adapter has passed five supervision calls plus the separate two-call file/session gate on CLI 2.0.26, covering native file and embedded-resource attachment delivery, identity, lifecycle, session resume, completed real tool progress with no replay duplicates, detailed permission, genuine form-question, stop/failure supervision, and descendant cleanup. FILE-01 is Done; FILE-02 generated-file return and the complete M2 exit gate remain open. Physical devices, other real harnesses, and production readiness must not be inferred from this local adapter or phone-sized-browser evidence.
+Qenbet is a verified local application with M2 active, not full-feature V1. The 2026-11-12 lifecycle change implements the EXEC-03 and EXEC-04 fixes and passes its offline gate, but both stay Partial until the live supervision gate passes on the installed CLI. All 59 offline tests pass, desktop and 390 px browser acceptance passes, and one real OpenCode adapter has passed five supervision calls plus the separate two-call file/session gate on CLI 2.0.26, covering native file and embedded-resource attachment delivery, identity, lifecycle, session resume, completed real tool progress with no replay duplicates, detailed permission, genuine form-question, stop/failure supervision, and descendant cleanup. FILE-01 is Done; FILE-02 generated-file return and the complete M2 exit gate remain open. Physical devices, other real harnesses, and production readiness must not be inferred from this local adapter or phone-sized-browser evidence.

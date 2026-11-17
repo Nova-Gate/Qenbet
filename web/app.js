@@ -1,3 +1,5 @@
+import { formatArguments, parseArguments } from "./args.mjs";
+
 const messagesElement = document.querySelector("#messages");
 const input = document.querySelector("#message-input");
 const composer = document.querySelector("#composer");
@@ -519,6 +521,50 @@ function address(agentName) {
   closeDrawers();
 }
 
+function environmentRow(name = "", value = "") {
+  const row = element("div", "env-row");
+  const key = document.createElement("input");
+  key.placeholder = "NAME";
+  key.value = name;
+  key.maxLength = 64;
+  key.setAttribute("aria-label", "Environment name");
+  const val = document.createElement("input");
+  val.placeholder = "value";
+  val.value = value;
+  val.setAttribute("aria-label", name ? `Value for ${name}` : "Environment value");
+  const remove = element("button", "icon-button");
+  remove.type = "button";
+  remove.textContent = "×";
+  remove.setAttribute("aria-label", "Remove variable");
+  remove.addEventListener("click", () => row.remove());
+  row.append(key, val, remove);
+  return row;
+}
+
+function renderEnvironment(env = {}) {
+  document.querySelector("#acp-env-rows").replaceChildren(...Object.entries(env).map(([name, value]) => environmentRow(name, value)));
+}
+
+function addEnvironmentRow() {
+  document.querySelector("#acp-env-rows").append(environmentRow());
+}
+
+function collectEnvironment() {
+  const env = {};
+  for (const row of document.querySelectorAll("#acp-env-rows .env-row")) {
+    const [nameInput, valueInput] = row.querySelectorAll("input");
+    const name = nameInput.value.trim();
+    const value = valueInput.value;
+    if (!name && !value) continue;
+    if (!name) throw new Error("Environment variables need a name.");
+    if (env[name] !== undefined) throw new Error(`Duplicate environment variable: ${name}.`);
+    env[name] = value;
+  }
+  return env;
+}
+
+const TRANSPORT_LABELS = { "local-fake": "local-fake", "local-opencode": "opencode", "local-acp": "custom-acp", "remote-acp": "remote-acp" };
+
 function openAgentDialog(agent = null) {
   const dialog = document.querySelector("#agent-dialog");
   const form = document.querySelector("#agent-form");
@@ -532,6 +578,8 @@ function openAgentDialog(agent = null) {
   document.querySelector("#agent-state").value = agent?.state ?? "";
   document.querySelector("#agent-config").value = agent?.config ?? "";
   document.querySelector("#agent-command").value = agent?.command ?? "";
+  document.querySelector("#agent-acp-args").value = formatArguments(agent?.args ?? []);
+  renderEnvironment(agent?.env ?? {});
   document.querySelector("#agent-central-workspace").value = agent?.centralWorkspace ?? "runtime/hub/central";
   document.querySelector("#agent-color").value = agent?.color ?? "yellow";
   document.querySelector("#agent-enabled").checked = agent?.enabled ?? true;
@@ -558,7 +606,7 @@ function renderAgents() {
     if (agent.health?.error) badge.title = agent.health.error;
     name.append(badge);
     identity.append(name, element("span", "agent-node", `${agent.nodeId}${agent.sessionReady ? " · session saved" : ""}`));
-    addressButton.append(identity, element("span", "agent-transport", agent.transport));
+    addressButton.append(identity, element("span", "agent-transport", TRANSPORT_LABELS[agent.transport] ?? agent.transport));
     addressButton.addEventListener("click", () => address(agent.name));
     const actions = element("div", "agent-actions");
     const test = element("button", "agent-test", health === "checking" ? "…" : "TEST");
@@ -788,16 +836,22 @@ function updateTransportFields() {
   const transport = document.querySelector("#agent-transport").value;
   const local = transport === "local-fake";
   const opencode = transport === "local-opencode";
+  const acp = transport === "local-acp";
   const remote = transport === "remote-acp";
+  const command = opencode || acp;
   document.querySelector("#local-agent-fields").hidden = !local;
-  document.querySelector("#opencode-agent-fields").hidden = !opencode;
+  document.querySelector("#opencode-agent-fields").hidden = !command;
+  document.querySelector("#acp-args-fields").hidden = !acp;
+  document.querySelector("#acp-env-fields").hidden = !acp;
   document.querySelector("#remote-agent-fields").hidden = !remote;
   document.querySelector("#agent-workspace").required = local;
   document.querySelector("#agent-state").required = local;
-  document.querySelector("#agent-command").required = opencode;
-  document.querySelector("#agent-central-workspace").required = opencode;
+  document.querySelector("#agent-command").required = command;
+  document.querySelector("#agent-central-workspace").required = opencode || acp;
   document.querySelector("#agent-config").required = remote;
-  document.querySelector("#central-workspace-label").textContent = opencode ? "OpenCode workspace" : "Central workspace";
+  document.querySelector("#command-label").textContent = acp ? "Command" : "OpenCode CLI path";
+  document.querySelector("#agent-command").placeholder = acp ? "/path/to/harness or name on PATH" : "/full/path/to/opencode-cli";
+  document.querySelector("#central-workspace-label").textContent = acp ? "ACP workspace" : opencode ? "OpenCode workspace" : "Central workspace";
   if (!document.querySelector("#agent-id").value && local && !document.querySelector("#agent-workspace").value) {
     const suffix = crypto.randomUUID().slice(0, 8);
     document.querySelector("#agent-workspace").value = `runtime/hub/agents/${suffix}-workspace`;
@@ -806,11 +860,25 @@ function updateTransportFields() {
   }
 }
 document.querySelector("#agent-transport").addEventListener("change", () => {
-  if (!document.querySelector("#agent-id").value && document.querySelector("#agent-transport").value === "local-opencode") {
+  const transport = document.querySelector("#agent-transport").value;
+  if (!document.querySelector("#agent-id").value && (transport === "local-opencode" || transport === "local-acp")) {
     document.querySelector("#agent-central-workspace").value = "";
   }
   updateTransportFields();
 });
+document.querySelector("#agent-acp-args").addEventListener("input", () => {
+  const field = document.querySelector("#agent-acp-args");
+  const preview = document.querySelector("#acp-args-preview");
+  try {
+    const args = parseArguments(field.value);
+    field.setCustomValidity("");
+    preview.textContent = `${args.length} argument${args.length === 1 ? "" : "s"}`;
+  } catch (error) {
+    field.setCustomValidity(error.message);
+    preview.textContent = error.message;
+  }
+});
+document.querySelector("#acp-env-add").addEventListener("click", addEnvironmentRow);
 document.querySelector("#add-agent-button").addEventListener("click", () => openAgentDialog());
 
 document.querySelector("#agent-form").addEventListener("submit", async (event) => {
@@ -819,6 +887,8 @@ document.querySelector("#agent-form").addEventListener("submit", async (event) =
   const save = document.querySelector("#save-agent-button");
   save.disabled = true;
   try {
+    const args = parseArguments(document.querySelector("#agent-acp-args").value);
+    const env = collectEnvironment();
     await api(id ? `/api/agents/${encodeURIComponent(id)}` : "/api/agents", {
       method: id ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -830,6 +900,8 @@ document.querySelector("#agent-form").addEventListener("submit", async (event) =
         state: document.querySelector("#agent-state").value,
         config: document.querySelector("#agent-config").value,
         command: document.querySelector("#agent-command").value,
+        args,
+        env,
         centralWorkspace: document.querySelector("#agent-central-workspace").value,
         color: document.querySelector("#agent-color").value,
         enabled: document.querySelector("#agent-enabled").checked,
@@ -838,8 +910,11 @@ document.querySelector("#agent-form").addEventListener("submit", async (event) =
     document.querySelector("#agent-dialog").close();
     await refresh();
     showToast(id ? "Agent updated." : "Agent registered.");
-  } catch (error) { showToast(error.message); }
-  finally { save.disabled = false; }
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    save.disabled = false;
+  }
 });
 
 document.querySelector("#remove-agent-button").addEventListener("click", async () => {

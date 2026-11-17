@@ -9,8 +9,8 @@ import { redactError } from "./redact.mjs";
 
 const MAX_TURNS_PER_REQUEST = 6;
 const COLORS = new Set(["yellow", "pink", "lavender"]);
-const TRANSPORTS = new Set(["local-fake", "local-opencode", "remote-acp"]);
-const EXECUTION_FIELDS = ["nodeId", "transport", "command", "workspace", "state", "config", "centralWorkspace"];
+const TRANSPORTS = new Set(["local-fake", "local-opencode", "local-acp", "remote-acp"]);
+const EXECUTION_FIELDS = ["nodeId", "transport", "command", "args", "env", "workspace", "state", "config", "centralWorkspace"];
 const problem = (message, status = 400) => Object.assign(new Error(message), { status });
 const clean = (value, fallback = "") => typeof value === "string" ? value.trim() : fallback;
 
@@ -378,7 +378,7 @@ export class Hub {
       name,
       nodeId,
       transport,
-      centralWorkspace: clean(input.centralWorkspace, existing?.centralWorkspace ?? (transport === "local-opencode" ? "" : "runtime/hub/central")),
+      centralWorkspace: clean(input.centralWorkspace, existing?.centralWorkspace ?? (["local-opencode", "local-acp"].includes(transport) ? "" : "runtime/hub/central")),
       color,
       enabled: typeof input.enabled === "boolean" ? input.enabled : existing?.enabled ?? true,
     };
@@ -388,6 +388,11 @@ export class Hub {
     } else if (transport === "local-opencode") {
       agent.command = clean(input.command, existing?.command);
       if (!agent.command || !agent.centralWorkspace) throw problem("OpenCode agents require an explicit CLI path and workspace.");
+    } else if (transport === "local-acp") {
+      agent.command = clean(input.command, existing?.command);
+      agent.args = this.normalizeArguments(input.args, existing?.args);
+      agent.env = this.normalizeEnvironment(input.env, existing?.env);
+      if (!agent.command || !agent.centralWorkspace) throw problem("Custom ACP agents require a command and workspace.");
     } else {
       agent.workspace = clean(input.workspace, existing?.workspace);
       agent.state = clean(input.state, existing?.state);
@@ -396,14 +401,48 @@ export class Hub {
     return agent;
   }
 
+  normalizeArguments(input, existing) {
+    if (input === undefined) return existing ?? [];
+    if (!Array.isArray(input)) throw problem("Arguments must be a list of strings.");
+    if (input.length > 32) throw problem("At most 32 arguments are allowed.");
+    return input.map((argument) => {
+      if (typeof argument !== "string") throw problem("Each argument must be text.");
+      const value = argument.trim();
+      if (!value) throw problem("Arguments cannot be empty.");
+      if (value.length > 1024) throw problem("Each argument must be at most 1024 characters.");
+      if (value.includes("\u0000")) throw problem("Arguments cannot contain NUL.");
+      return value;
+    });
+  }
+
+  normalizeEnvironment(input, existing) {
+    if (input === undefined) return existing ?? {};
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw problem("Environment must be a name/value map.");
+    const entries = Object.entries(input);
+    if (entries.length > 32) throw problem("At most 32 environment variables are allowed.");
+    const env = {};
+    for (const [rawName, rawValue] of entries) {
+      const name = rawName.trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name)) throw problem(`Invalid environment name: ${name.slice(0, 40) || "(empty)"}.`);
+      if (/(^|_)(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIALS?)$/i.test(name)) {
+        throw problem("Environment secrets belong in the harness profile, not the agent registry.");
+      }
+      if (typeof rawValue !== "string") throw problem(`Environment value for ${name} must be text.`);
+      if (rawValue.length > 4096) throw problem(`Environment value for ${name} is too long.`);
+      if (rawValue.includes("\u0000")) throw problem("Environment values cannot contain NUL.");
+      env[name] = rawValue;
+    }
+    return env;
+  }
+
   assertUniqueAgentName(agent) {
     if (this.state.agentDefinitions.some((candidate) => candidate.id !== agent.id && candidate.name.toLowerCase() === agent.name.toLowerCase())) {
       throw problem("An agent with that name already exists.", 409);
     }
-    if (agent.transport === "local-opencode") {
+    if (["local-opencode", "local-acp"].includes(agent.transport)) {
       const workspace = resolve(this.root, agent.centralWorkspace);
-      const duplicate = this.state.agentDefinitions.some((candidate) => candidate.id !== agent.id && candidate.transport === "local-opencode" && resolve(this.root, candidate.centralWorkspace) === workspace);
-      if (duplicate) throw problem("Another OpenCode agent already owns that workspace.", 409);
+      const duplicate = this.state.agentDefinitions.some((candidate) => candidate.id !== agent.id && ["local-opencode", "local-acp"].includes(candidate.transport) && resolve(this.root, candidate.centralWorkspace) === workspace);
+      if (duplicate) throw problem("Another ACP agent already owns that workspace.", 409);
     }
   }
 
