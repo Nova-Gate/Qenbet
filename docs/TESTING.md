@@ -201,6 +201,7 @@ These are open defects, not out-of-scope limitations. Do not rely on the affecte
 - **Custom ACP credential screening is best-effort.** An innocuous env name (`FOO=my-secret`), a positional argument, or a `--config` file can carry a secret undetected; values are stored plaintext in the registry.
 - **Mention separator consumption covers whitespace and `, ; : . ! ?`**; a mention followed by `)` and then another mention (`@Mini) @Dell`) addresses only the first.
 - **A remote ACP agent receives the Hub-side workspace path as `cwd`.**
+- **The live REAL-SUP gate can abort at step 1** when OpenCode answers without invoking the requested tool; two 2.2.7 runs did so on 2026-11-17. A manual permission probe on the same CLI passed (approval card, `allow_once`, file write, `waiting → running → completed`), but the five-call gate remains the closure requirement.
 
 ## Current limitations
 
