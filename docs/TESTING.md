@@ -8,6 +8,7 @@ The repository contains a runnable, account-free application with:
 - A persistent agent registry with add, edit, disable, re-enable, and remove controls.
 - Deterministic local-fake and authenticated remote-ACP execution.
 - A real local OpenCode ACP adapter with configurable CLI and workspace paths, native file tools, and durable native sessions.
+- A custom ACP adapter that launches any ACP-speaking command with operator-supplied arguments and non-secret environment, rejects credential-like names, values, and arguments, and preserves the native session across presentation-only edits.
 - Live updates over server-sent events.
 - Node identity on every agent reply.
 - Workspace selection and execution-proof evidence.
@@ -38,7 +39,9 @@ npm run test:opencode-supervision  # live question/approval/stop/failure gate; f
 
 `tests/lifecycle.test.mjs` covers idle and absolute prompt timeouts with cancellation and process-group kill, a queued follow-up that cannot start until the timed-out process exits, pre-dispatch versus post-dispatch failure classification, approval-paused timers, wedged-client retirement after a session timeout or a malformed stream, waiting-approval shutdown, concurrent multi-agent shutdown, shutdown awaiting an in-flight retirement, orphan cleanup, and a real SIGTERM deadline with exit code 0. Server lifecycle defaults are `--prompt-idle-timeout-ms 600000`, `--prompt-absolute-timeout-ms 1800000`, `--approval-timeout-ms 600000`, `--shutdown-grace-ms 5000`, and `--shutdown-deadline-ms 12000`; `--request-timeout-ms` bounds handshake and session requests.
 
-The browser command starts an isolated temporary server on a random port, uses separate runtime state, exercises the real file input through Chrome, verifies attachment chips, room locking, message metadata, exact downloads, agent-received bytes, and 390 px layout, then covers pending/completed progress, command/output, plans, failures, visible permission details, and native question accept/decline flows. It writes screenshots and a report under `artifacts/ui-validation/` and stops its temporary processes. It does not replace the persistent service or modify its state. GitHub Actions runs `npm run check` and `npm test` for every pull request and push to `main`; browser and live provider tests remain local acceptance gates.
+`tests/custom-acp.test.mjs` covers shell-style argument tokenization, command/argument/environment validation, credential-name, credential-value, and secret-argument rejection (including GitHub, Slack, Google, GitLab, npm, and Hugging Face token shapes), unique workspaces, argument and environment propagation, empty and space-preserving arguments, a bad command, a full custom-agent turn through the shared queue, and session preservation across color edits versus reset on execution-field edits.
+
+The browser command starts an isolated temporary server on a random port, uses separate runtime state, exercises the real file input through Chrome, verifies attachment chips, room locking, message metadata, exact downloads, agent-received bytes, and 390 px layout, then covers pending/completed progress, command/output, plans, failures, visible permission details, native question accept/decline flows, and saving, checking, and removing a custom ACP agent. It writes screenshots and a report under `artifacts/ui-validation/` and stops its temporary processes. It does not replace the persistent service or modify its state. GitHub Actions runs `npm run check` and `npm test` for every pull request and push to `main`; browser and live provider tests remain local acceptance gates.
 
 The integration tests verify:
 
@@ -145,7 +148,8 @@ The launcher creates demo-only state under `runtime/`, generates a local connect
 6. Remove it and confirm its previous messages remain in the conversation.
 7. Restart the app and confirm registry changes persist.
 8. Open **+ ADD**, choose **OpenCode · real ACP**, and confirm only the CLI path and OpenCode workspace are additionally required. Use a full CLI path and a disposable workspace for a real agent.
-9. While an agent has queued, running, or waiting work, confirm its edit and remove actions are blocked until that work reaches a terminal state.
+9. Choose **Custom ACP · any harness**, confirm the command, arguments, and environment fields appear, and select **Check agent**. For DeepSeek Harness Desktop use command `/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness`, arguments `"/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js" --profile acp`, and environment `ELECTRON_RUN_AS_NODE=1`; expect **AVAILABLE**.
+10. While an agent has queued, running, or waiting work, confirm its edit and remove actions are blocked until that work reaches a terminal state.
 
 ### Execution supervision and approvals
 
@@ -194,6 +198,7 @@ Each fake workspace contains `execution-proof.json`, `last-prompt.txt`, and `eve
 These are open defects, not out-of-scope limitations. Do not rely on the affected behaviour and do not treat a passing offline suite as coverage of them.
 
 - **A concurrent duplicate post during a failing save** can receive the message that the failed save then rolls back; the retry path is safe, the in-flight response is not.
+- **Custom ACP credential screening is best-effort.** An innocuous env name (`FOO=my-secret`), a positional argument, or a `--config` file can carry a secret undetected; values are stored plaintext in the registry.
 - **Mention separator consumption covers whitespace and `, ; : . ! ?`**; a mention followed by `)` and then another mention (`@Mini) @Dell`) addresses only the first.
 - **A remote ACP agent receives the Hub-side workspace path as `cwd`.**
 

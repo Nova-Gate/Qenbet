@@ -80,7 +80,7 @@ The current connector uses authenticated raw TCP and is accepted only as a loopb
 
 ### Harness on each machine
 
-Owns its native provider authentication, tools, workspace behavior, and local project memory. Local-fake and remote-fake harnesses support deterministic offline acceptance. The real `local-opencode` adapter launches the installed OpenCode CLI over ACP, reuses its native provider profile and session storage, and passes real work through the same Hub queue and execution boundary.
+Owns its native provider authentication, tools, workspace behavior, and local project memory. Local-fake and remote-fake harnesses support deterministic offline acceptance. The real `local-opencode` adapter launches the installed OpenCode CLI over ACP, reuses its native provider profile and session storage, and passes real work through the same Hub queue and execution boundary. The `local-acp` adapter launches any ACP-speaking command with operator-supplied arguments and non-secret environment, with a workspace unique per agent.
 
 ## Agent and room configuration
 
